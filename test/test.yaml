@@ -1,0 +1,8 @@
+yaml:
+  string: "my value"
+  bool: True
+  int: 13
+  object:
+    - 'string1'
+    - 'string2'
+  

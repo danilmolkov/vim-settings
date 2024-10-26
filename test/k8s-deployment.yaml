@@ -1,0 +1,268 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: website
+  namespace: default
+  # labels and annotations here are only for the deployment resource type
+  labels:
+    app: website
+  annotations:
+    source_url: "git@gitlab.com:kisphp/example.git"
+    resource_type: deployment
+spec:
+  # remove if HPA is used
+  replicas: 1
+  # the deployments must wait X seconds after seeing a Pod become healthy before moving on to updating the next Pod
+  minReadySeconds: 10
+  progressDeadlineSeconds: 60
+  # keep the last X deployments history in case of rollback
+  revisionHistoryLimit: 5
+
+  # This is the default deployment strategy in Kubernetes. 
+  # It replaces the existing version of pods with a new version, updating pods slowly one by one, without cluster downtime.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# This strategy deploys a new version of an application alongside the existing version. 
+# Once the new version is deployed and verified, traffic can be switched to the new version. 
+# This can help to avoid downtime, but it requires more infrastructure.
+#
+#  strategy:
+#    type: Recreate
+
+  selector:
+    matchLabels:
+      # label for the deployment used by the Service to connect to the deployment
+      app: website
+
+  template:
+    metadata:
+      name: website
+      # labels and annotations here are only for the pods that are created by the deployment -> replicaset -> pods
+      labels:
+        app: website
+      annotations:
+        source_url: "git@gitlab.com:kisphp/example.git"
+        resource_type: deployment-pod
+    spec:
+      restartPolicy: Always
+
+      # Optional
+      securityContext:
+        runAsUser: 33
+        runAsGroup: 33
+        runAsNonRoot: true
+
+      # configure entries in /etc/hosts file inside the pod.
+      # /etc/hosts file will be a shared volume between the containers of the pod
+      hostAliases:
+        - ip: "127.0.0.1"
+          hostnames:
+            - "foo.local"
+            - "bar.local"
+        - ip: "10.1.2.3"
+          hostnames:
+            - "foo.remote"
+            - "bar.remote"
+
+      # target specific nodes
+      nodeSelector:
+        type: application
+
+      # this can be added into the default service account and will be applied globally
+      imagePullSecrets:
+        - name: my-registry-secret
+
+      containers:
+        - name: website # container name in pod
+          image: nginx:latest # docker image used for this container
+          imagePullPolicy: Always # always get the docker image from registry
+
+          ports:
+            - containerPort: 80
+
+          env:
+            - name: APP_TYPE
+              value: application
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: APP_SECRET
+                  name: db-secrets
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: K8S_POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+
+          envFrom:
+            # load environment variables from config map
+            - configMapRef:
+                name: site-configurations
+            # load encoded secret from Secrets manifest
+            - secretRef:
+                name: site-secrets
+
+          # set resources
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "256Mi"
+              cpu: "100m"
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+              httpHeaders:
+                - name: Custom-Header
+                  value: Awesome
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            successThreshold: 1 # always 1
+
+#          livenessProbe:
+#            exec:
+#              command:
+#                - cat
+#                - /tmp/healthy
+#            initialDelaySeconds: 5
+#            periodSeconds: 5
+
+          readinessProbe:
+            exec:
+              command:
+                - cat
+                - /tmp/healthy
+            initialDelaySeconds: 5
+            periodSeconds: 30 # default 10, >= 1
+            successThreshold: 1 # defualt 1, can be higher number
+
+#           TCP liveness probe
+#          readinessProbe:
+#            tcpSocket:
+#              port: 8080
+#            initialDelaySeconds: 5
+#            periodSeconds: 10
+#          livenessProbe:
+#            tcpSocket:
+#              port: 8080
+#            initialDelaySeconds: 15
+#            periodSeconds: 20
+
+          # Protect slow starting containers with startup probes
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: liveness-port
+            failureThreshold: 30
+            periodSeconds: 10
+            successThreshold: 1 # always 1
+
+          # this is a custom application running inside the cluster to post a slack message when a pod is created or terminated
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - "/bin/bash"
+                  - "-c"
+                  - 'curl -s -X GET --max-time 60 http://${SERVICE_NAME}.notifications.svc.cluster.local/start/${HOSTNAME}/php >&1; exit 0'
+            preStop:
+              exec:
+                command:
+                  - "/bin/bash"
+                  - "-c"
+                  - 'curl -s -X GET --max-time 60 http://${SERVICE_NAME}.notifications.svc.cluster.local/stop/${HOSTNAME}/php >&1; exit 0'
+
+          volumeMounts:
+            # thumbnails volume
+            - mountPath: /app/public/thumbs
+              name: thumbnails
+
+            # file uploads volume
+            - mountPath: /app/uploads
+              name: uploads
+
+            # from configmap
+            - name: config
+              mountPath: "/config"
+              readOnly: true
+
+      initContainers:
+        - name: update-database
+          image: php-container
+          envFrom:
+            - configMapRef:
+                name: db-credentials
+          command:
+            - "bin/console"
+            - "setup:install"
+          volumeMounts:
+            - mountPath: /opt/test
+              name: test
+          securityContext:
+            privileged: true
+            runAsUser: 0 # root user
+            runAsGroup: 0 # root group
+#            runAsNonRoot: true
+
+      # set volumes per deployment that will be used by containers using volumeMounts
+      volumes:
+        # define thumbnails directory as empty volume every time
+        - name: thumbnails
+          emptyDir: {}
+
+        # load uploads directory from PersistentVolumeClaim
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: website-uploads
+
+        - name: test
+          persistentVolumeClaim:
+            claimName: my-test-volume
+
+        # load from AWS EFS
+        - name: efs-data
+          nfs:
+            server: 1a2b3c4d.efs.eu-central-1.amazonaws.com
+            path: /
+
+        # load from configmap
+        - name: config-volume
+          configMap:
+            name: special-config
+            # optional
+            items:
+              - key: SPECIAL_LEVEL
+                path: keys
+
+        - name: config
+          configMap:
+            name: my-app-config
+            items:
+              - key: "game.properties"
+                path: "game.properties"
+              - key: "user-interface.properties"
+                path: "user-interface.properties"
+
+
