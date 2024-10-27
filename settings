@@ -3,6 +3,7 @@ syntax on
 
 " Enable plugins and load plugin for the detected file type.
 filetype plugin on
+
 " Load an indent file for the detected file type.
 filetype indent on
 
@@ -59,4 +60,19 @@ autocmd FileType yaml setlocal ts=2 sts=2 sw=2 expandtab
 
 " Speed up scrolling in Vim
 set ttyfast
+
+" Show partial command you type in the last line of the screen.
+set showcmd
+
+
+
+" Enable auto completion menu after pressing TAB.
+set wildmenu
+" Make wildmenu behave like similar to Bash completion.
+set wildmode=list:longest
+" There are certain files that we would never want to edit with Vim.
+" Wildmenu will ignore files with these extensions.
+set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
+
+
 
