@@ -46,7 +46,7 @@ set noswapfile
 set updatetime=300
 
 " Set color scheme (you can change it to your preferred theme)
-colorscheme desert
+colorscheme wildcharm
 
 " Better status line
 set laststatus=2
@@ -64,7 +64,8 @@ set ttyfast
 " Show partial command you type in the last line of the screen.
 set showcmd
 
-
+" Set the commands to save in history default number is 20.
+set history=1000
 
 " Enable auto completion menu after pressing TAB.
 set wildmenu
@@ -75,4 +76,11 @@ set wildmode=list:longest
 set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
 
 
+call plug#begin()
+" List of plugins
+Plug 'Yggdroot/indentLine'
+call plug#end()
 
+let g:indentLine_char = ''
+let g:indentLine_leadingSpaceEnabled = 1
+let g:indentLine_leadingSpaceChar = '·'
