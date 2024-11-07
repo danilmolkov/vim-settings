@@ -14,7 +14,7 @@ vim_install_colorshemes() {
 
 vim_install_plug() {
     echo '> Download pluging manager'
-    curl -fLO ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim 2> /dev/null
+    curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim 2> /dev/null
     echo '> Install plugins'
     vim +PlugInstall +qall
 }
