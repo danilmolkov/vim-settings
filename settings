@@ -36,7 +36,7 @@ set autoindent
 set smartindent
 
 " Enable clipboard support
-set clipboard=unnamedplus
+set clipboard=autoselectplus
 
 " Disable backup and swap files
 set nobackup
